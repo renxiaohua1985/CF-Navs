@@ -26,8 +26,4 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # 首次部署通过 GitHub Actions 将绑定的暗号注入到 Cloudflare Secrets 中
-          secrets: |
-            SETUP_TOKEN
-        env:
-          SETUP_TOKEN: ${{ secrets.SETUP_TOKEN }}
+
