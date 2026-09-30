@@ -1,0 +1,33 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main  # 触发部署的分支，如果你用的是 develop 分支请改为 develop
+
+jobs:
+  deploy:
+    runs-on: Ubuntu-latest
+    name: Build and Deploy
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24 # 推荐使用项目要求的 Node.js 24 LTS 版本
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Publish to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # 首次部署通过 GitHub Actions 将绑定的暗号注入到 Cloudflare Secrets 中
+          secrets: |
+            SETUP_TOKEN
+        env:
+          SETUP_TOKEN: ${{ secrets.SETUP_TOKEN }}
