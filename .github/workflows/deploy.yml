@@ -1,4 +1,4 @@
-name: Build and Deploy to Cloudflare Workers
+name: Build and Deploy
 
 on:
   push:
@@ -33,6 +33,5 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --log-level debug
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
