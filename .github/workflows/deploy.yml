@@ -19,9 +19,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      vars.CF_NAVS_DEPLOY_PROVIDER == 'github-actions' &&
-      github.ref_name == (vars.CF_NAVS_DEPLOY_BRANCH || 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
