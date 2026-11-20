@@ -72,7 +72,7 @@ const DATA_SERVICE_FNS = [
   'applyConfigFromSettings', 'applyLocalBookmarkDelete', 'applyLocalBookmarkSort', 'applyLocalBookmarkUpsert',
   'applyLocalCategoryDelete', 'applyLocalCategorySort', 'applyLocalCategoryUpsert', 'applyLocalSettings',
   'applyLoggedInData', 'isLoggedIn', 'persistCurrentAdminData', 'refreshBookmarkIconCacheInBackground',
-  'readAdminDataForEdit', 'confirmLoggedInDataAfterLocalMutation', 'refreshLoggedInData', 'refreshPublicData', 'refreshVisibleData',
+  'readAdminDataForEdit', 'readBookmarkForEdit', 'confirmLoggedInDataAfterLocalMutation', 'refreshLoggedInData', 'refreshPublicData', 'refreshVisibleData',
 ]
 vi.mock('../../src/lib/dataService', () => {
   const module: Record<string, unknown> = {
@@ -117,7 +117,7 @@ vi.mock('../../src/lib/appBookmarkController', () => ({
     h.bookmark.deps = deps
     h.bookmark.ctrl = {
       getState: () => ({ modalOpen: false, modalMode: 'create', active: null, saving: false, deletingId: null, error: '' }),
-      ...fnMap(['openCreate', 'openEdit', 'close', 'submit', 'remove', 'batchRemove', 'batchMove', 'sort', 'reorganize', 'reset']),
+      ...fnMap(['openCreate', 'openEdit', 'retryEdit', 'destroy', 'close', 'submit', 'remove', 'batchRemove', 'batchMove', 'sort', 'reorganize', 'reset']),
     }
     return h.bookmark.ctrl
   },
@@ -376,7 +376,6 @@ describe('App boot splash and view switching', () => {
     expect(home.authLoading).toBe(false)
     expect(home.focusCategoryId).toBeNull()
     expect(home.onOpenCreateCategory).toBe(h.category.ctrl.openCreate)
-    expect(home.onOpenCreateRootCategory).toBe(h.category.ctrl.openCreateRoot)
     expect(home.onOpenCreateBookmark).toBe(h.bookmark.ctrl.openCreate)
     expect(home.onEditBookmark).toBe(h.bookmark.ctrl.openEdit)
     expect(home.onReorganizeBookmarks).toBe(h.bookmark.ctrl.reorganize)
@@ -609,6 +608,34 @@ describe('App boot splash and view switching', () => {
     h.settings.deps.onChange({ saving: true, error: '', importExport: io })
     flushSync()
     expect(importingUpdates.length).toBe(ioBefore)
+  })
+
+  it('shows the read shell before the lazy editor exists, routes retry/cancel and waits for authoritative fields', async () => {
+    await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
+    const state = { modalOpen: true, modalMode: 'edit', active: null, reading: true, readError: '', saving: false, deletingId: null, error: '' }
+    h.bookmark.deps.onChange(state)
+    flushSync()
+    await settle()
+    expect(document.querySelector('[data-testid="bookmark-modal"] [role="status"]')?.textContent).toContain('正在读取书签')
+    expect(mounted('BookmarkEditModal')).toBeNull()
+    expect(document.querySelector('[data-testid="bookmark-modal"] input')).toBeNull()
+    h.bookmark.deps.onChange({ ...state, reading: false, readError: '读取失败，请重试。' })
+    flushSync()
+    const retry = [...document.querySelectorAll<HTMLButtonElement>('[data-testid="bookmark-modal"] button')].find(button => button.textContent === '重试')!
+    retry.click()
+    expect(h.bookmark.ctrl.retryEdit).toHaveBeenCalledTimes(1)
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>('[data-testid="bookmark-modal"] button')].find(button => button.textContent === '取消')!
+    cancel.click()
+    expect(h.bookmark.ctrl.close).toHaveBeenCalledTimes(1)
+    await h.bookmark.deps.ensureLazyComponent('BookmarkEditModal')
+    await settle()
+    expect(mounted('BookmarkEditModal')!.props.open).toBe(false)
+    const active = { id: 10, title: 'Ready', icon: 'data:image/svg+xml;base64,PHN2Zy8+' }
+    h.bookmark.deps.onChange({ ...state, reading: false, active })
+    flushSync()
+    expect(document.querySelector('[data-testid="bookmark-edit-read-state"]')).toBeNull()
+    expect(mounted('BookmarkEditModal')!.props.open).toBe(true)
+    expect(mounted('BookmarkEditModal')!.props.value).toBe(active)
   })
 })
 
@@ -937,6 +964,18 @@ describe('App Install / Recover lazy loading', () => {
 })
 
 describe('App global keydown, spotlight and bookmark view', () => {
+  it('closes Spotlight before handing its URL to the shared bookmark editor', async () => {
+    await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
+    keydown({ key: 'k', ctrlKey: true })
+    await settle()
+    const spotlight = mounted('SearchSpotlight')!.props
+    h.bookmark.ctrl.openCreate.mockImplementation(() => {
+      expect(spotlight.open).toBe(false)
+    })
+    await (spotlight.onCreateBookmark as (url: string) => Promise<void>)('https://new.example/Case')
+    expect(h.bookmark.ctrl.openCreate).toHaveBeenCalledExactlyOnceWith(undefined, 'https://new.example/Case')
+  })
+
   it('opens Spotlight with Ctrl+K and "/" on a visible home, closes with Esc and Ctrl+K', async () => {
     await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
     const open = keydown({ key: 'k', ctrlKey: true })
